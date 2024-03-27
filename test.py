@@ -1,17 +1,18 @@
 import numpy as np
 import random
 
-roi = np.load("extracted_numbers.npy")
-# print(roi)
+roi = np.load("extracted_numbers_HR_ct.npy")
 
-no_of_regs = random.randrange(0, len(roi))
-#
-print(no_of_regs)
-#
-reg_idx = random.sample(range(0, len(roi)), no_of_regs)
+print(roi)
 
-print(reg_idx)
+# no_of_regs = random.randrange(0, len(roi))
+# #
+# print(no_of_regs)
+# #
+# reg_idx = random.sample(range(0, len(roi)), no_of_regs)
 #
-for x in reg_idx:
-    reg = roi[x]
-    print(reg)
+# print(reg_idx)
+# #
+# for x in reg_idx:
+#     reg = roi[x]
+#     print(reg)

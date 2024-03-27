@@ -1,5 +1,6 @@
+import time
 from typing import Optional
-
+import os, cv2
 import numpy as np
 import sys
 import random
@@ -26,6 +27,7 @@ class EA:
         category index number
         :return: an array of the prediction of individuals only for the target/ancestor category: (40,) shaped  array
         """
+        # print("\nPREDS: ", preds[:, class_no])
         return preds[:, class_no]
 
     @staticmethod
@@ -71,6 +73,7 @@ class EA:
                 in the population array, and random_keep images as numpy arrays.
         """
         idx_elite = fitness.argsort()[-self.numberOfElites:]
+        # print("IDX ELITE: ", idx_elite[::-1])
         half_pop_size = images.shape[0] / 2
         idx_middle_class = fitness.argsort()[int(half_pop_size): -self.numberOfElites]
         elite = images[idx_elite, :][::-1]
@@ -118,9 +121,9 @@ class EA:
         # np.random.shuffle(mutated_group)
         no_of_individuals = len(mutated_group)  # 20 individuals
         for individual in range(int(no_of_individuals * percentage)):
-            locations_x = np.random.randint(x.shape[0], size=int(no_of_pixels))
-            locations_y = np.random.randint(x.shape[1], size=int(no_of_pixels))
-            locations_z = np.random.randint(x.shape[2], size=int(no_of_pixels))
+            locations_x = np.random.randint(x_array.shape[0], size=int(no_of_pixels))
+            locations_y = np.random.randint(x_array.shape[1], size=int(no_of_pixels))
+            locations_z = np.random.randint(x_array.shape[2], size=int(no_of_pixels))
             new_values: [int] = random.choices(np.array([-1, 1]), k=int(no_of_pixels))
             mutated_group[individual, locations_x, locations_y, locations_z] = (
                     mutated_group[individual, locations_x, locations_y, locations_z] - new_values
@@ -154,14 +157,16 @@ class EA:
         # np.random.shuffle(mutated_group)
         no_of_individuals = len(mutated_group)  # 20 individuals
         for individual in range(int(no_of_individuals * percentage)):
-            # no_of_regs = random.randrange(0, len(roi))
-            # reg_idx = random.sample(range(1, len(roi)), no_of_regs)
-
-            for j in range(len(roi)):
+            no_of_regs = random.randrange(0, len(roi))
+            reg_idx = random.sample(range(1, len(roi)), no_of_regs)
+            for j in reg_idx:
                 reg = roi[j]
                 no_of_pixels =(reg[1] - reg[0]) * (reg[3] - reg[2]) * 0.8  # mutates all pixels within the region
-                locations_x = np.random.randint(reg[0], reg[1], size=int(no_of_pixels))
-                locations_y = np.random.randint(reg[2], reg[3], size=int(no_of_pixels))
+                # locations_x = np.random.randint(reg[0], reg[1], size=int(no_of_pixels))
+                # locations_y = np.random.randint(reg[2], reg[3], size=int(no_of_pixels))
+                locations_x = np.random.randint(reg[2], reg[3], size=int(no_of_pixels))
+                locations_y = np.random.randint(reg[0], reg[1], size=int(no_of_pixels))
+
                 locations_z = np.random.randint(3, size=int(no_of_pixels))
                 new_values: [int] = random.choices(np.array([-1, 1]), k=int(no_of_pixels))
                 mutated_group[individual, locations_x, locations_y, locations_z] = (
@@ -191,15 +196,15 @@ class EA:
                 reg = roi[x]
                 # reg[1] - reg[0] =  x_max - x_min
                 # reg[3] - reg[2] = y_max - y_min
-                z = np.random.randint(_x.shape[2])
+                z = np.random.randint(x_array.shape[2])
 
-                temp = crossedover_group[parent_index_1, reg[0]: reg[1], reg[2]: reg[3], z]
+                temp = crossedover_group[parent_index_1, reg[2]: reg[3], reg[0]: reg[1],  z]
 
-                crossedover_group[parent_index_1, reg[0]: reg[1], reg[2]: reg[3], z] = crossedover_group[parent_index_2,
-                                                                                       reg[0]: reg[1], reg[2]: reg[3],
+                crossedover_group[parent_index_1, reg[2]: reg[3], reg[0]: reg[1] , z] = crossedover_group[parent_index_2,
+                                                                                       reg[2]: reg[3], reg[0]: reg[1],
                                                                                        z]
 
-                crossedover_group[parent_index_2, reg[0]: reg[1], reg[2]: reg[3], z] = temp
+                crossedover_group[parent_index_2, reg[2]: reg[3], reg[0]: reg[1],  z] = temp
 
         return crossedover_group
 
@@ -227,7 +232,7 @@ class EA:
             crossedover_group[parent_index_2, start_x: start_x + size_x, start_y: start_y + size_y, z] = temp
         return crossedover_group
 
-    def _generate(self, x: np.ndarray, y: Optional[int] = None) -> np.ndarray:
+    def _generate(self, x, y: Optional[int] = None) -> np.ndarray:
         """
         :param x: An array with the original inputs to be attacked.
         :param y: An integer with the true or target labels.
@@ -236,9 +241,15 @@ class EA:
         boundary_min = 0
         boundary_max = 255
 
-        img = x.reshape((1, x.shape[0], x.shape[1], x.shape[2])).copy()
-        img = preprocess_input(img)
-        preds = self.klassifier.predict(img)
+        # img = x.reshape((1, x.shape[0], x.shape[1], x.shape[2])).copy()
+        # img = Image.fromarray(x.astype(np.uint8))
+
+        img_resized = x.resize((224, 224), resample=1)
+        img_resized = img_to_array(img_resized)
+        img_resized =img_resized.reshape((1, 224, 224, 3))
+
+        img_r = preprocess_input(img_resized)
+        preds = self.klassifier.predict(img_r)
         label0 = decode_predictions(preds)
         label1 = label0[0][0]  # Gets the Top1 label and values for reporting.
         ancestor = label1[1]  # label
@@ -246,22 +257,52 @@ class EA:
         print("Before the image is:  " + ancestor + " --> " + str(label1[2]) + " ____ index: " + str(anc_indx))
         if self.targeted:
             print("Target class index number is: ", y)
-        images = np.array([x] * self.pop_size).astype(int)  # pop_size * ancestor images are created
+        images = np.array([x_array] * self.pop_size).astype(np.uint8)  # pop_size * ancestor images are created
+        # convert HR images to 224x224 for evaluation
+
+
         count = 0
         while True:
-            img = preprocess_input(images)
-            preds = self.klassifier.predict(img)  # predictions of 40 images
+
+            imagesResized = images.copy()
+            imgResized = []
+            b2 = time.time()
+            for i in range(40):
+                img = Image.fromarray(imagesResized[i].astype(np.uint8))
+                res = img.resize((224, 224), resample=1)
+                res = img_to_array(res)
+                imgResized.append(res)
+            e2 = time.time()
+            imgResized = np.array(imgResized)
+
+
+
+
+
+
+            # images_r = images.copy()
+            # imgResized = []
+            # for i in range(40):
+            #     res = cv2.resize(images_r[i], (224, 224))#, interpolation=cv2.INTER_LANCZOS4)
+            #     # res = img_to_array(res)
+            #     imgResized.append(res)
+            # imgResized = np.array(imgResized)
+
+            img_r = preprocess_input(imgResized)
+            preds = self.klassifier.predict(img_r)  # predictions of 40 images
             dom_indx = np.argmax(preds[int(np.argmax(preds) / 1000)])
             best_image = int(np.argmax(preds) / 1000)
             adv_img = images[int(np.argmax(preds) / 1000)]  # best adversarial image so far.
-            # print("\nc_t label value: ", preds[int(np.argmax(preds) / 1000)][306])
+            print("\nc_t label value: ", preds[int(np.argmax(preds) / 1000)][306])
             # Dominant category report ##################
             label0 = decode_predictions(preds)  # Reports predictions with label and label values
+            print(label0)
+            print("Best image: ", best_image)
             label1 = label0[best_image][0]  # Gets the Top1 label and values for reporting.
             dom_cat = label1[1]  # label
             dom_cat_prop = label1[2]  # label probability
             ###########################################
-            sys.stdout.write(
+            print(
                 "\rgeneration: "
                 + str(count)
                 + "/"
@@ -275,6 +316,7 @@ class EA:
                 + "___ct: "
                 + str(preds[int(np.argmax(preds) / 1000)][y])
             )
+
             # Stopping the algorithm criteria:
             if count == self.max_iter:
                 # if algorithm can not create the adversarial image within "generation" stop the algorithm
@@ -309,10 +351,9 @@ class EA:
                 ) = self._selection_untargeted(images, fitness)
             elite2 = elite.copy()
             keep = np.concatenate((elite2, random_keep))
-
             # Reproduce individuals by mutating Elits and Middle class---------
             # mutate and crossover individuals
-            im_size = x.shape[0] * x.shape[1] * x.shape[2]
+            im_size = x_array.shape[0] * x_array.shape[1] * x_array.shape[2]
             no_of_pixels = self._get_no_of_pixels(im_size)
             mutated_middle_class = self._mutation(
                 x,
@@ -323,6 +364,7 @@ class EA:
                 boundary_max,
             )
             mutated_keep_group1 = self._mutation_new(x, no_of_pixels, keep, percentage_keep, boundary_min, boundary_max, roi)
+
             mutated_keep_group2 = self._mutation_new(
                 x,
                 no_of_pixels,
@@ -339,6 +381,7 @@ class EA:
 
             # Create new population
             images = np.concatenate((elite, crossover_group))
+            # print("IMAGES: ", images.shape)
             count += 1
         return adv_img
 
@@ -355,15 +398,15 @@ from keras.preprocessing.image import img_to_array, load_img
 from PIL import Image
 
 # Step 1: Load a clean image and convert it to numpy array:
-image = load_img("acorn1.JPEG", target_size=(224, 224), interpolation="lanczos")
-x = img_to_array(image)
-
+x = load_img("acorn1.JPEG")#, target_size=(224, 224), interpolation="lanczos")
+# x = img_to_array(image)
+x_array = img_to_array(x)
 y = 306  # Optional! Target category index number. It is only for the targeted attack.
 
 kclassifier = VGG16(weights="imagenet")
 
 # Step 3: Built the attack and generate adversarial image:
-roi = np.load("extracted_numbers_ct.npy")
+roi = np.load("extracted_numbers_HR_ct.npy")
 attackEA = EA(
     kclassifier, max_iter=10000, confidence=0.55, targeted=True
 )  # if targeted is True, then confidence will be taken into account.
