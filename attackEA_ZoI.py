@@ -167,6 +167,9 @@ class EA:
                 mutated_group[individual, locations_x, locations_y, locations_z] = (
                         mutated_group[individual, locations_x, locations_y, locations_z] - new_values
                 )
+            noise = mutated_group[individual] - _x
+            noise = np.clip(noise, -epsilon, epsilon)
+            mutated_group[individual] = _x + noise
         mutated_group = np.clip(mutated_group, boundary_min, boundary_max)
         # mutated_group = mutated_group % 200
         return mutated_group
@@ -361,7 +364,7 @@ x = img_to_array(image)
 y = 306  # Optional! Target category index number. It is only for the targeted attack.
 
 kclassifier = VGG16(weights="imagenet")
-
+epsilon = 16
 # Step 3: Built the attack and generate adversarial image:
 roi = np.load("extracted_numbers_ct.npy")
 attackEA = EA(
