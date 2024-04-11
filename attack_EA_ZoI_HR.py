@@ -5,7 +5,7 @@ import numpy as np
 import sys
 import random
 
-random.seed(0)
+# random.seed(0)
 
 
 # Do NOT touch the class.
@@ -157,21 +157,17 @@ class EA:
         # np.random.shuffle(mutated_group)
         no_of_individuals = len(mutated_group)  # 20 individuals
         for individual in range(int(no_of_individuals * percentage)):
-            no_of_regs = random.randrange(0, len(roi))
-            reg_idx = random.sample(range(1, len(roi)), no_of_regs)
-            for j in reg_idx:
-                reg = roi[j]
-                no_of_pixels =(reg[1] - reg[0]) * (reg[3] - reg[2]) * 0.8  # mutates all pixels within the region
-                # locations_x = np.random.randint(reg[0], reg[1], size=int(no_of_pixels))
-                # locations_y = np.random.randint(reg[2], reg[3], size=int(no_of_pixels))
-                locations_x = np.random.randint(reg[2], reg[3], size=int(no_of_pixels))
-                locations_y = np.random.randint(reg[0], reg[1], size=int(no_of_pixels))
+            no_of_pixels = random.randrange(0, len(roi))
+            pixel_idx = random.sample(range(1, len(roi)), no_of_pixels)
 
-                locations_z = np.random.randint(3, size=int(no_of_pixels))
-                new_values: [int] = random.choices(np.array([-1, 1]), k=int(no_of_pixels))
-                mutated_group[individual, locations_x, locations_y, locations_z] = (
-                        mutated_group[individual, locations_x, locations_y, locations_z] - new_values
-                )
+            locations_x = _x[pixel_idx]
+            locations_y =
+
+            locations_z = np.random.randint(3, size=int(no_of_pixels))
+            new_values: [int] = random.choices(np.array([-1, 1]), k=int(no_of_pixels))
+            mutated_group[individual, locations_x, locations_y, locations_z] = (
+                    mutated_group[individual, locations_x, locations_y, locations_z] - new_values
+            )
         mutated_group = np.clip(mutated_group, boundary_min, boundary_max)
         # mutated_group = mutated_group % 200
         return mutated_group
@@ -257,8 +253,10 @@ class EA:
         print("Before the image is:  " + ancestor + " --> " + str(label1[2]) + " ____ index: " + str(anc_indx))
         if self.targeted:
             print("Target class index number is: ", y)
-        images = np.array([x_array] * self.pop_size).astype(np.uint8)  # pop_size * ancestor images are created
+        # images = np.array([x_array] * self.pop_size).astype(np.uint8)  # pop_size * ancestor images are created
+        images = np.array([x_array] * self.pop_size)  # pop_size * ancestor images are created
         # convert HR images to 224x224 for evaluation
+        # images = x * self.pop_size
 
 
         count = 0
@@ -268,9 +266,9 @@ class EA:
             imgResized = []
             b2 = time.time()
             for i in range(40):
-                img = Image.fromarray(imagesResized[i].astype(np.uint8))
-                res = img.resize((224, 224), resample=1)
-                res = img_to_array(res)
+                # img = Image.fromarray(imagesResized[i].astype(np.uint8))
+                res = cv2.resize(images[i], (224, 224))#, interpolation=cv2.INTER_LANCZOS4)
+                # res = img_to_array(res)
                 imgResized.append(res)
             e2 = time.time()
             imgResized = np.array(imgResized)
@@ -398,7 +396,7 @@ from keras.preprocessing.image import img_to_array, load_img
 from PIL import Image
 
 # Step 1: Load a clean image and convert it to numpy array:
-x = load_img("acorn1.JPEG")#, target_size=(224, 224), interpolation="lanczos")
+x = load_img("acorn1.png")#, target_size=(224, 224), interpolation="lanczos")
 # x = img_to_array(image)
 x_array = img_to_array(x)
 y = 306  # Optional! Target category index number. It is only for the targeted attack.
@@ -406,14 +404,27 @@ y = 306  # Optional! Target category index number. It is only for the targeted a
 kclassifier = VGG16(weights="imagenet")
 
 # Step 3: Built the attack and generate adversarial image:
-roi = np.load("extracted_numbers_HR_ct.npy")
+roi = np.load("unique_pixels.npy")
+
+print('##############################################################')
+print("The size of the image is: ", (x_array.shape[0], x_array.shape[1]))
+print("Number of regions to modify: ",roi.shape[0])
+
+
+
+ratio = 100 * roi.shape[0] / (x_array.shape[0]*x_array.shape[1])
+
+print(f"Size ZoI/Image: {roi.shape[0]}/{x_array.shape[0]*x_array.shape[1]}")
+print("The percentage of the image will be modified is: %.1f%%" % (ratio))
+print('##############################################################')
+
 attackEA = EA(
     kclassifier, max_iter=10000, confidence=0.55, targeted=True
 )  # if targeted is True, then confidence will be taken into account.
 advers = attackEA._generate(x, y)  # returns adversarial image as .npy file. y is optional.
 np.save("advers.npy", advers)
 img = Image.fromarray(advers.astype(np.uint8))
-img.save("advers.png", "png")
+img.save("advers_ct_HR_0411.png", "png")
 
 #TODO:
 # 1. work on mutation

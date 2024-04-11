@@ -1,18 +1,17 @@
 import numpy as np
 import random
 
-roi = np.load("extracted_numbers_HR_ct.npy")
+roi = np.load("unique_pixels.npy")
 
-print(roi)
+print(roi.shape)
+img = (500, 374)
 
-# no_of_regs = random.randrange(0, len(roi))
-# #
-# print(no_of_regs)
-# #
-# reg_idx = random.sample(range(0, len(roi)), no_of_regs)
-#
-# print(reg_idx)
-# #
-# for x in reg_idx:
-#     reg = roi[x]
-#     print(reg)
+ratio = 100 * roi.shape[0] / (img[0]*img[1])
+print("The percentage of the image modified is: %.1f " %(ratio))
+
+
+no_of_pixels = random.randrange(0, len(roi))
+pixel_idx = random.sample(range(1, len(roi)), no_of_pixels)
+
+print("No of pixels: ", no_of_pixels)
+print("pizel_idx: ", pixel_idx)
