@@ -160,8 +160,9 @@ class EA:
             for j in range(len(roi)):
                 reg = roi[j]
                 no_of_pixels =(reg[1] - reg[0]) * (reg[3] - reg[2]) * 0.8  # mutates all pixels within the region
-                locations_x = np.random.randint(reg[0], reg[1], size=int(no_of_pixels))
-                locations_y = np.random.randint(reg[2], reg[3], size=int(no_of_pixels))
+
+                locations_x = np.random.randint(reg[2], reg[3], size=int(no_of_pixels))
+                locations_y = np.random.randint(reg[0], reg[1], size=int(no_of_pixels))
                 locations_z = np.random.randint(3, size=int(no_of_pixels))
                 new_values: [int] = random.choices(np.array([-1, 1]), k=int(no_of_pixels))
                 mutated_group[individual, locations_x, locations_y, locations_z] = (
@@ -196,13 +197,13 @@ class EA:
                 # reg[3] - reg[2] = y_max - y_min
                 z = np.random.randint(_x.shape[2])
 
-                temp = crossedover_group[parent_index_1, reg[0]: reg[1], reg[2]: reg[3], z]
+                temp = crossedover_group[parent_index_1, reg[2]: reg[3], reg[0]: reg[1], z]
 
-                crossedover_group[parent_index_1, reg[0]: reg[1], reg[2]: reg[3], z] = crossedover_group[parent_index_2,
-                                                                                       reg[0]: reg[1], reg[2]: reg[3],
+                crossedover_group[parent_index_1, reg[2]: reg[3], reg[0]: reg[1], z] = crossedover_group[parent_index_2,
+                                                                                       reg[2]: reg[3], reg[0]: reg[1],
                                                                                        z]
 
-                crossedover_group[parent_index_2, reg[0]: reg[1], reg[2]: reg[3], z] = temp
+                crossedover_group[parent_index_2, reg[2]: reg[3], reg[0]: reg[1], z] = temp
 
         return crossedover_group
 
@@ -360,20 +361,33 @@ from PIL import Image
 # Step 1: Load a clean image and convert it to numpy array:
 image = load_img("acorn1.JPEG", target_size=(224, 224), interpolation="lanczos")
 x = img_to_array(image)
+print(x.shape)
 
 y = 306  # Optional! Target category index number. It is only for the targeted attack.
 
 kclassifier = VGG16(weights="imagenet")
 epsilon = 16
 # Step 3: Built the attack and generate adversarial image:
+# Define the region to modify on the clean image:
 roi = np.load("extracted_numbers_ct.npy")
+print("The size of the image is: ", x.shape )
+print("Number of regions to modify: ",roi.shape)
+reg = 0
+for z in roi:
+    reg = reg + (z[1] - z[0]) * (z[3] - z[2])
+ratio = 100 * reg / (x.shape[0]*x.shape[1])
+# print(ratio)
+print("The percentage of the image will be modified is: %.1f%%" %(ratio))
+print('##############################################################')
+
 attackEA = EA(
     kclassifier, max_iter=10000, confidence=0.55, targeted=True
 )  # if targeted is True, then confidence will be taken into account.
 advers = attackEA._generate(x, y)  # returns adversarial image as .npy file. y is optional.
 np.save("advers.npy", advers)
 img = Image.fromarray(advers.astype(np.uint8))
-img.save("advers.png", "png")
+img.save("advers_ct_random_mut_2230.png", "png")
+
 
 #TODO:
 # 1. work on mutation
