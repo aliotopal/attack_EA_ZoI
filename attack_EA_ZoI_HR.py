@@ -158,16 +158,20 @@ class EA:
         no_of_individuals = len(mutated_group)  # 20 individuals
         for individual in range(int(no_of_individuals * percentage)):
             no_of_pixels = random.randrange(0, len(roi))
-            pixel_idx = random.sample(range(1, len(roi)), no_of_pixels)
-
-            locations_x = _x[pixel_idx]
-            locations_y =
-
+            roi_indx = np.random.choice(roi.shape[0], size=no_of_pixels)
+            roi_new = roi[roi_indx]
+            locations_x = np.array(roi_new)[:, 1]
+            locations_y = np.array(roi_new)[:, 0]
             locations_z = np.random.randint(3, size=int(no_of_pixels))
             new_values: [int] = random.choices(np.array([-1, 1]), k=int(no_of_pixels))
             mutated_group[individual, locations_x, locations_y, locations_z] = (
                     mutated_group[individual, locations_x, locations_y, locations_z] - new_values
             )
+
+            noise = mutated_group[individual] - _x
+            noise = np.clip(noise, -epsilon, epsilon)
+            mutated_group[individual] = _x + noise
+
         mutated_group = np.clip(mutated_group, boundary_min, boundary_max)
         # mutated_group = mutated_group % 200
         return mutated_group
@@ -186,21 +190,37 @@ class EA:
         for i in range(0, len(parents_idx), 2):
             parent_index_1 = parents_idx[i]
             parent_index_2 = parents_idx[i + 1]
-            no_of_regs = random.randrange(0, len(roi))
-            reg_idx = random.sample(range(1, len(roi)), no_of_regs)
-            for x in reg_idx:
-                reg = roi[x]
-                # reg[1] - reg[0] =  x_max - x_min
-                # reg[3] - reg[2] = y_max - y_min
-                z = np.random.randint(x_array.shape[2])
+            roi_3d = np.hstack((roi, np.random.randint(0, 3, size=(len(roi), 1))))
+            no_of_pixels = random.randrange(0, len(roi))
+            roi_indx = np.random.choice(roi_3d.shape[0], size=no_of_pixels)
+            roi_3d_selected = roi_3d[roi_indx]
+            z = np.random.randint(x_array.shape[2])
+            coords_img1, coords_img2 = roi_3d_selected[:, :2], roi_3d_selected[:, :2]
+            channels_img1, channels_img2 = roi_3d_selected[:, 2], roi_3d_selected[:, 2]
 
-                temp = crossedover_group[parent_index_1, reg[2]: reg[3], reg[0]: reg[1],  z]
+            # Swap pixel values between images
+            img1_values = crossedover_group[parent_index_1, coords_img1[:, 1], coords_img1[:, 0], channels_img1]
+            img2_values = crossedover_group[parent_index_2, coords_img2[:, 1], coords_img2[:, 0], channels_img2]
+            crossedover_group[parent_index_1, coords_img1[:, 1], coords_img1[:, 0], channels_img1] = img2_values
+            crossedover_group[parent_index_2, coords_img2[:, 1], coords_img2[:, 0], channels_img2] = img1_values
+            # Print the first few swapped pixels for verification
+            # print("Swapped pixels:")
+            # for coord in roi_3d_selected[:5]:
+            #     y, x, c = coord
+            #     print("Pixel at ({}, {}, {}) in img1: {}".format(x, y, c, crossedover_group[parent_index_1,x, y, c]))
+            #     print("Pixel at ({}, {}, {}) in img2: {}".format(x, y, c, crossedover_group[parent_index_2,x,  y, c]))
 
-                crossedover_group[parent_index_1, reg[2]: reg[3], reg[0]: reg[1] , z] = crossedover_group[parent_index_2,
-                                                                                       reg[2]: reg[3], reg[0]: reg[1],
-                                                                                       z]
 
-                crossedover_group[parent_index_2, reg[2]: reg[3], reg[0]: reg[1],  z] = temp
+
+
+            # for coord in roi_3d_selected:
+            #     x, y, c = coord
+            #     temp = crossedover_group[parent_index_1, y, x, c].copy()
+            #     crossedover_group[parent_index_1, y, x, c] = crossedover_group[parent_index_2, y, x, c]
+            #     crossedover_group[parent_index_2, y, x, c] = temp
+
+
+
 
         return crossedover_group
 
@@ -291,11 +311,11 @@ class EA:
             dom_indx = np.argmax(preds[int(np.argmax(preds) / 1000)])
             best_image = int(np.argmax(preds) / 1000)
             adv_img = images[int(np.argmax(preds) / 1000)]  # best adversarial image so far.
-            print("\nc_t label value: ", preds[int(np.argmax(preds) / 1000)][306])
+            # print("\nc_t label value: ", preds[int(np.argmax(preds) / 1000)][306])
             # Dominant category report ##################
             label0 = decode_predictions(preds)  # Reports predictions with label and label values
-            print(label0)
-            print("Best image: ", best_image)
+            # print(label0)
+            # print("Best image: ", best_image)
             label1 = label0[best_image][0]  # Gets the Top1 label and values for reporting.
             dom_cat = label1[1]  # label
             dom_cat_prop = label1[2]  # label probability
@@ -400,6 +420,7 @@ x = load_img("acorn1.png")#, target_size=(224, 224), interpolation="lanczos")
 # x = img_to_array(image)
 x_array = img_to_array(x)
 y = 306  # Optional! Target category index number. It is only for the targeted attack.
+epsilon = 32
 
 kclassifier = VGG16(weights="imagenet")
 
@@ -408,12 +429,8 @@ roi = np.load("unique_pixels.npy")
 
 print('##############################################################')
 print("The size of the image is: ", (x_array.shape[0], x_array.shape[1]))
-print("Number of regions to modify: ",roi.shape[0])
-
-
-
+print("Number of pixels to modify: ",roi.shape[0])
 ratio = 100 * roi.shape[0] / (x_array.shape[0]*x_array.shape[1])
-
 print(f"Size ZoI/Image: {roi.shape[0]}/{x_array.shape[0]*x_array.shape[1]}")
 print("The percentage of the image will be modified is: %.1f%%" % (ratio))
 print('##############################################################')
