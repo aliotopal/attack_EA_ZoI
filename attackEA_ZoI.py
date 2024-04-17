@@ -255,13 +255,14 @@ class EA:
             # mutate and crossover individuals
             im_size = x.shape[0] * x.shape[1] * x.shape[2]
             no_of_pixels = self._get_no_of_pixels(im_size)
-            mutated_middle_class = self._mutation(
+            mutated_middle_class = self._mutation_new(
                 x,
                 no_of_pixels,
                 middle_class,
                 percentage_middle_class,
                 boundary_min,
                 boundary_max,
+                roi
             )
             mutated_keep_group1 = self._mutation_new(x, no_of_pixels, keep, percentage_keep, boundary_min, boundary_max, roi)
             mutated_keep_group2 = self._mutation_new(
