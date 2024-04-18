@@ -268,9 +268,9 @@ class EA:
         preds = self.klassifier.predict(img_r)
         label0 = decode_predictions(preds)
         label1 = label0[0][0]  # Gets the Top1 label and values for reporting.
-        ancestor = label1[1]  # label
+        anc = label1[1]  # label
         anc_indx = np.argmax(preds)
-        print("Before the image is:  " + ancestor + " --> " + str(label1[2]) + " ____ index: " + str(anc_indx))
+        print("Before the image is:  " + anc + " --> " + str(label1[2]) + " ____ index: " + str(anc_indx))
         if self.targeted:
             print("Target class index number is: ", y)
         # images = np.array([x_array] * self.pop_size).astype(np.uint8)  # pop_size * ancestor images are created
@@ -278,25 +278,27 @@ class EA:
         # convert HR images to 224x224 for evaluation
         # images = x * self.pop_size
 
+        count = 1
 
-        count = 0
+        timing = open(f'timings_{ancestor}{j}.txt', 'a')
+        timing.write("\t\t\tTiming Report\n")
+        timing.write("Generation\tSelection\t\tMutation\t\tCrossover\t\tOverall\n")
+
+        c_ts = []   # collection of c_t values through out the generations
+        c_2best = []    # without the c_t label value, the best label values collection.
+
+
         while True:
+            b0 = time.time()    # per generation
 
-            imagesResized = images.copy()
+            b1 = time.time()    # selection/ evaluation
             imgResized = []
-            b2 = time.time()
             for i in range(40):
                 # img = Image.fromarray(imagesResized[i].astype(np.uint8))
                 res = cv2.resize(images[i], (224, 224))#, interpolation=cv2.INTER_LANCZOS4)
                 # res = img_to_array(res)
                 imgResized.append(res)
-            e2 = time.time()
             imgResized = np.array(imgResized)
-
-
-
-
-
 
             # images_r = images.copy()
             # imgResized = []
@@ -307,19 +309,36 @@ class EA:
             # imgResized = np.array(imgResized)
 
             img_r = preprocess_input(imgResized)
-            preds = self.klassifier.predict(img_r)  # predictions of 40 images
-            dom_indx = np.argmax(preds[int(np.argmax(preds) / 1000)])
-            best_image = int(np.argmax(preds) / 1000)
-            adv_img = images[int(np.argmax(preds) / 1000)]  # best adversarial image so far.
-            # print("\nc_t label value: ", preds[int(np.argmax(preds) / 1000)][306])
+            preds = self.klassifier.predict(img_r)  # predictions of 40 images (40, 1000)
+            probs = self._get_class_prob(preds, y)  # target category values of images (40,)
+            best_adv_indx = np.argmax(probs)        # best adversarial image according to the target label value
+
+            dom_indx = np.argmax(preds[best_adv_indx])  # dominant label value of the best adversarial image
+
+            adv_img = images[best_adv_indx]             # best adversarial image.
+
+            print("\nc_t label value_new: ", preds[best_adv_indx][y])
+            c_ts.append(preds[best_adv_indx][y])
             # Dominant category report ##################
-            label0 = decode_predictions(preds)  # Reports predictions with label and label values
-            # print(label0)
-            # print("Best image: ", best_image)
-            label1 = label0[best_image][0]  # Gets the Top1 label and values for reporting.
+            label0 = decode_predictions(preds, 1000)  # Reports predictions with label and label values of 40 images
+            print(np.array(label0).shape)
+            print("Best image: ", best_adv_indx+1)
+            label1 = label0[best_adv_indx][0]  # Gets the Top1 label and label value of the best adversarial image.
+            # print("label1: ", label0[best_adv_indx])
             dom_cat = label1[1]  # label
             dom_cat_prop = label1[2]  # label probability
+
+            if dom_cat != target:
+                c_2best.append(dom_cat_prop)
+            else:
+                label2 = label0[best_adv_indx][1]
+                # dom_cat = label2[1]  # label
+                dom_cat_prop_2 = label2[2]  # label probability
+                c_2best.append(dom_cat_prop_2)
             ###########################################
+
+
+
             print(
                 "\rgeneration: "
                 + str(count)
@@ -332,8 +351,9 @@ class EA:
                 + " ____ index: "
                 + str(dom_indx)
                 + "___ct: "
-                + str(preds[int(np.argmax(preds) / 1000)][y])
+                + str(preds[best_adv_indx][y])
             )
+
 
             # Stopping the algorithm criteria:
             if count == self.max_iter:
@@ -371,18 +391,22 @@ class EA:
             keep = np.concatenate((elite2, random_keep))
             # Reproduce individuals by mutating Elits and Middle class---------
             # mutate and crossover individuals
+            e1 = time.time()    # selection/ evaluation
+
+
+            b2 = time.time()  # mutation time
             im_size = x_array.shape[0] * x_array.shape[1] * x_array.shape[2]
             no_of_pixels = self._get_no_of_pixels(im_size)
-            mutated_middle_class = self._mutation(
+            mutated_middle_class = self._mutation_new(
                 x,
                 no_of_pixels,
                 middle_class,
                 percentage_middle_class,
                 boundary_min,
                 boundary_max,
+                roi
             )
             mutated_keep_group1 = self._mutation_new(x, no_of_pixels, keep, percentage_keep, boundary_min, boundary_max, roi)
-
             mutated_keep_group2 = self._mutation_new(
                 x,
                 no_of_pixels,
@@ -392,16 +416,29 @@ class EA:
                 boundary_max,
                 roi
             )
-
             all_ = np.concatenate((mutated_middle_class, mutated_keep_group2))  # shape: (30, 224, 224, 3)
+            e2 = time.time()  # mutation time
+
+
+            b3 = time.time()  # crossover time
             parents_idx = self._get_crossover_parents(all_)
             crossover_group = self._crossover_new(x, all_, parents_idx, roi)  # shape: (30, 224, 224, 3)
-
             # Create new population
             images = np.concatenate((elite, crossover_group))
-            # print("IMAGES: ", images.shape)
+            e3 = time.time()  # crossover time
+
+
+            e0 = time.time()  # per generation
+
+            selection = "{:.5f}".format(e1 - b1)
+            mutation = "{:.5f}".format(e2 - b2)
+            crossover = "{:.5f}".format(e3 - b3)
+            overall = "{:.5f}".format(e0 - b0)
+            timing.write(f"{count}\t\t\t{selection}\t\t\t{mutation}\t\t\t{crossover}\t\t\t{overall}\n")
+
             count += 1
-        return adv_img
+
+        return adv_img, count, dom_cat_prop, dom_cat, c_ts, c_2best
 
 
 # SET UP your attack
@@ -416,34 +453,54 @@ from keras.preprocessing.image import img_to_array, load_img
 from PIL import Image
 
 # Step 1: Load a clean image and convert it to numpy array:
-x = load_img("acorn1.png")#, target_size=(224, 224), interpolation="lanczos")
+x = load_img("acorn1.JPEG")#, target_size=(224, 224), interpolation="lanczos")
 # x = img_to_array(image)
 x_array = img_to_array(x)
 y = 306  # Optional! Target category index number. It is only for the targeted attack.
-epsilon = 32
+epsilon = 8
 
 kclassifier = VGG16(weights="imagenet")
+
+#TESTING::
+ancestor = "acorn"
+j = 1
+target = 'rhinoceros_beetle'
+
 
 # Step 3: Built the attack and generate adversarial image:
 roi = np.load("unique_pixels.npy")
 
 print('##############################################################')
+print(f"#########  {ancestor}_{j}  #########\n")
 print("The size of the image is: ", (x_array.shape[0], x_array.shape[1]))
 print("Number of pixels to modify: ",roi.shape[0])
 ratio = 100 * roi.shape[0] / (x_array.shape[0]*x_array.shape[1])
 print(f"Size ZoI/Image: {roi.shape[0]}/{x_array.shape[0]*x_array.shape[1]}")
 print("The percentage of the image will be modified is: %.1f%%" % (ratio))
 print('##############################################################')
-
+modelX = "VGG16"
 attackEA = EA(
-    kclassifier, max_iter=10000, confidence=0.55, targeted=True
+    kclassifier, max_iter=20000, confidence=0.30, targeted=True
 )  # if targeted is True, then confidence will be taken into account.
-advers = attackEA._generate(x, y)  # returns adversarial image as .npy file. y is optional.
+advers, count, dom_cat_prop, dom_cat, c_ts, c_2best = attackEA._generate(x, y)  # returns adversarial image as .npy file. y is optional.
 np.save("advers.npy", advers)
 img = Image.fromarray(advers.astype(np.uint8))
-img.save("advers_ct_HR_0411.png", "png")
+dom_cat_prop =  "{:.3f}".format(dom_cat_prop)
+img.save(f"advers_ct_{count}_{dom_cat_prop}_{dom_cat}_eps{epsilon}.png", "png")
+f = open(f'report_{modelX}.txt', 'a')
+f.write(f"acorn1,{count},{dom_cat},{dom_cat_prop},eps:{epsilon}\n")
+f.close()
+
+c_ts = np.array(c_ts)
+c_2best = np.array(c_2best)
+np.save(f'{ancestor}{j}_c_ts.npy', c_ts)
+np.save(f'{ancestor}{j}_c_2best.npy',c_2best)
+
+
+
 
 #TODO:
 # 1. work on mutation
 # 2. show the target label value in console real time
 # 3. test increased region sizes
+
